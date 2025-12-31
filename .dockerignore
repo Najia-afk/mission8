@@ -1,0 +1,14 @@
+dataset/
+mlruns/
+models/*.pt
+models/*.keras
+__pycache__/
+.ipynb_checkpoints/
+.git/
+.vscode/
+venv/
+mission8_venv/
+reports/
+*.log
+.DS_Store
+Thumbs.db

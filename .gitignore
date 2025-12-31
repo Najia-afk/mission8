@@ -1,0 +1,56 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+mission8_venv/
+venv/
+env/
+.env
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# IDE settings
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Model files (large)
+*.keras
+*.h5
+*.pt
+*.pth
+*.onnx
+models/*.keras
+models/*.pt
+
+# Dataset (use symlink from mission6)
+dataset/
+
+# Cache
+cache/
+*.pkl
+*.pickle
+
+# MLflow artifacts (tracked separately)
+mlruns/
+
+# Reports and outputs
+reports/*.html
+reports/*.pdf
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp

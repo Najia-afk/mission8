@@ -1,0 +1,64 @@
+# Mission 8 - Technical Watch: PanCAN POC
+# Docker Compose Configuration with NVIDIA GPU Support
+
+services:
+  # Jupyter Lab Service with GPU
+  jupyter:
+    container_name: mission8_jupyter
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8888:8888"
+    volumes:
+      - .:/app
+      - ./dataset:/app/dataset
+      - ./mlruns:/app/mlruns
+      - ./models:/app/models
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    networks:
+      - mission8_network
+    depends_on:
+      - mlflow
+    shm_size: 8gb
+    # GPU configuration
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # MLflow Tracking Server
+  mlflow:
+    container_name: mission8_mlflow
+    image: ghcr.io/mlflow/mlflow:v2.10.0
+    ports:
+      - "5008:5000"
+    volumes:
+      - ./mlruns:/mlflow/mlruns
+    environment:
+      - MLFLOW_TRACKING_URI=sqlite:///mlflow/mlruns/mlflow.db
+    command: >
+      mlflow server
+      --backend-store-uri sqlite:///mlflow/mlruns/mlflow.db
+      --default-artifact-root /mlflow/mlruns
+      --host 0.0.0.0
+      --port 5000
+    networks:
+      - mission8_network
+
+networks:
+  mission8_network:
+    driver: bridge
+
+volumes:
+  mlruns:
+  models:
