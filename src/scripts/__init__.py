@@ -43,6 +43,17 @@ from .shap_analysis import (
     print_shap_summary
 )
 
+from .vit_baseline import (
+    ViTBaseline,
+    create_vit_model,
+    load_or_create_vit,
+    evaluate_vit,
+    plot_vit_comparison,
+    plot_vit_comparison_plotly,
+    print_architecture_comparison,
+    print_final_comparison
+)
+
 __all__ = [
     # Data exploration
     'plot_class_distribution',
@@ -77,4 +88,14 @@ __all__ = [
     'plot_per_class_shap',
     'plot_local_shap',
     'print_shap_summary',
+    
+    # ViT Baseline (Transformer comparison)
+    'ViTBaseline',
+    'create_vit_model',
+    'load_or_create_vit',
+    'evaluate_vit',
+    'plot_vit_comparison',
+    'plot_vit_comparison_plotly',
+    'print_architecture_comparison',
+    'print_final_comparison',
 ]
