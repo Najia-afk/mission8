@@ -20,16 +20,20 @@ services:
       - MLFLOW_TRACKING_URI=http://mlflow:5000
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      # Memory optimization for 8GB VRAM RTX 5070
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+      - TF_GPU_ALLOCATOR=cuda_malloc_async
     networks:
       - mission8_network
     depends_on:
       - mlflow
     shm_size: 8gb
-    # GPU configuration
+    # GPU configuration for RTX 5070 (8GB VRAM)
     deploy:
       resources:
         limits:
-          memory: 16G
+          memory: 20G
+          cpus: '16'
         reservations:
           devices:
             - driver: nvidia

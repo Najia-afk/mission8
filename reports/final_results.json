@@ -1,0 +1,57 @@
+{
+  "pancan_lite": {
+    "test_accuracy": 0.8479087452471483,
+    "test_f1": 0.8467979706272478,
+    "trainable_params": 3287055,
+    "param_sample_ratio": 5225.842607313196
+  },
+  "vgg16_baseline": {
+    "test_accuracy": 0.8479087452471483,
+    "test_f1": 0.846585896431615,
+    "trainable_params": 107000000,
+    "param_sample_ratio": 170000.0
+  },
+  "dataset": {
+    "train_samples": 629,
+    "val_samples": 158,
+    "test_samples": 263,
+    "num_classes": 7,
+    "class_names": [
+      "Baby_Care",
+      "Beauty_and_Personal_Care",
+      "Computers",
+      "Home_Decor_and_Festive_Needs",
+      "Home_Furnishing",
+      "Kitchen_and_Dining",
+      "Watches"
+    ]
+  },
+  "configuration": {
+    "backbone": "resnet50",
+    "grid_sizes": [
+      [
+        8,
+        10
+      ],
+      [
+        4,
+        5
+      ],
+      [
+        2,
+        3
+      ],
+      [
+        1,
+        2
+      ],
+      [
+        1,
+        1
+      ]
+    ],
+    "num_orders": 2,
+    "num_layers": 3,
+    "threshold": 0.71
+  }
+}
