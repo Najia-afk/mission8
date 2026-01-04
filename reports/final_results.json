@@ -1,15 +1,38 @@
 {
   "pancan_lite": {
-    "test_accuracy": 0.8479087452471483,
-    "test_f1": 0.8467979706272478,
+    "test_accuracy": 0.8403041825095057,
+    "test_f1": 0.838621646892935,
     "trainable_params": 3287055,
-    "param_sample_ratio": 5225.842607313196
+    "param_sample_ratio": 5225.842607313196,
+    "reference": "[Jiu et al., 2025]"
   },
   "vgg16_baseline": {
     "test_accuracy": 0.8479087452471483,
     "test_f1": 0.846585896431615,
     "trainable_params": 107000000,
-    "param_sample_ratio": 170000.0
+    "param_sample_ratio": 170000.0,
+    "reference": "Baseline"
+  },
+  "vit_baseline": {
+    "test_accuracy": 0.8783269961977186,
+    "test_f1": 0.8760718016999899,
+    "trainable_params": 526855,
+    "reference": "[Wang et al., 2025]"
+  },
+  "ensemble": {
+    "test_accuracy": 0.8821292775665399,
+    "test_f1": 0.8806590268566884,
+    "models": [
+      "ViT-B/16",
+      "PanCANLite",
+      "VGG16"
+    ],
+    "weights": [
+      1.2,
+      1.0,
+      1.0
+    ],
+    "reference": "[Abulfaraj & Binzagr, 2025]"
   },
   "dataset": {
     "train_samples": 629,
@@ -25,69 +48,5 @@
       "Kitchen_and_Dining",
       "Watches"
     ]
-  },
-  "configuration": {
-    "backbone": "resnet50",
-    "grid_sizes": [
-      [
-        8,
-        10
-      ],
-      [
-        4,
-        5
-      ],
-      [
-        2,
-        3
-      ],
-      [
-        1,
-        2
-      ],
-      [
-        1,
-        1
-      ]
-    ],
-    "num_orders": 2,
-    "num_layers": 3,
-    "threshold": 0.71
-  },
-  "vit_b16": {
-    "test_accuracy": 0.8669,
-    "test_f1": 0.8653,
-    "trainable_params": 526089
-  },
-  "ensemble": {
-    "test_accuracy": 0.8821292775665399,
-    "test_f1": 0.8806590268566884,
-    "models": [
-      "ViT-B/16",
-      "PanCANLite",
-      "VGG16"
-    ],
-    "weights": [
-      1.2,
-      1.0,
-      1.0
-    ],
-    "improvement_over_best": 0.38022813688213253
-  },
-  "multimodal_fusion": {
-    "model": "Multimodal Fusion Lite",
-    "architecture": "EfficientNet-B0 (1280-dim) + TF-IDF (768-dim) -> Late Fusion",
-    "test_accuracy": 0.9239543726235742,
-    "test_f1": 0.9236957738854068,
-    "trainable_params": 657927,
-    "num_classes": 7,
-    "fusion_type": "late_fusion",
-    "text_encoder": "TF-IDF",
-    "image_encoder": "EfficientNet-B0"
-  },
-  "vit_baseline": {
-    "test_accuracy": 0.8783269961977186,
-    "test_f1": 0.8761853902166921,
-    "trainable_params": 526855
   }
 }
