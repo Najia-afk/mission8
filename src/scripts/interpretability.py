@@ -1,15 +1,26 @@
 """
 Model Interpretability Tools for Mission 8
-Grad-CAM, SHAP, and Attention Visualization
+Grad-CAM, SHAP, Saliency Maps, and Attention Visualization
+
+This module provides comprehensive interpretability tools for deep learning models,
+supporting both CNN and Vision Transformer architectures.
+
+References:
+    - Grad-CAM: [Selvaraju et al., 2017] "Grad-CAM: Visual Explanations from Deep Networks"
+    - SHAP: [Lundberg & Lee, 2017] "A Unified Approach to Interpreting Model Predictions"
+    - Saliency Maps: [Simonyan et al., 2014] "Deep Inside Convolutional Networks"
 """
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from pathlib import Path
+from typing import Optional, List, Tuple, Union
 import cv2
 
 
@@ -303,3 +314,275 @@ def plot_attention_weights(model, images, class_names, save_dir=None):
 if __name__ == "__main__":
     print("Interpretability tools for Mission 8")
     print("Available: GradCAMVisualizer, SHAPAnalyzer, plot_attention_weights")
+    print("           SaliencyMapVisualizer, ViTSaliencyVisualizer")
+
+
+# =============================================================================
+# SALIENCY MAP VISUALIZERS
+# =============================================================================
+
+class SaliencyMapVisualizer:
+    """
+    Input Gradient Saliency Maps for CNN architectures (e.g., PanCANLite, VGG16).
+    
+    Saliency maps highlight which input pixels have the highest gradient with
+    respect to the predicted class, indicating regions important for the prediction.
+    
+    Works with fixed gradient flow in EfficientGridFeatureExtractor.
+    
+    Example:
+        >>> visualizer = SaliencyMapVisualizer(model)
+        >>> saliency = visualizer.generate_saliency(image_batch, class_idx=0)
+        >>> visualizer.plot_saliency(image_batch, saliency, class_names)
+    """
+    
+    def __init__(self, model: nn.Module):
+        """
+        Initialize saliency map visualizer.
+        
+        Args:
+            model: PyTorch model (CNN-based)
+        """
+        self.model = model
+    
+    def generate_saliency(
+        self, 
+        input_tensor: torch.Tensor, 
+        class_idx: int
+    ) -> np.ndarray:
+        """
+        Generate saliency map using input gradients.
+        
+        Args:
+            input_tensor: Input image tensor [1, C, H, W]
+            class_idx: Target class index for gradient computation
+            
+        Returns:
+            Normalized saliency map [H, W]
+        """
+        self.model.eval()
+        
+        # Create input that requires gradients
+        input_img = input_tensor.clone().detach().requires_grad_(True)
+        
+        # Forward pass - gradients flow through backbone
+        output = self.model(input_img)
+        
+        # Backward pass for target class
+        self.model.zero_grad()
+        if input_img.grad is not None:
+            input_img.grad.zero_()
+        
+        output[0, class_idx].backward()
+        
+        # Get gradients w.r.t. input
+        if input_img.grad is None:
+            print("⚠️ Warning: No gradients computed - check gradient flow")
+            return np.zeros((input_tensor.shape[2], input_tensor.shape[3]))
+        
+        saliency = input_img.grad.data.abs()
+        
+        # Take max across color channels
+        saliency, _ = saliency.max(dim=1)
+        saliency = saliency.squeeze().cpu().numpy()
+        
+        # Normalize
+        if saliency.max() > 0:
+            saliency = saliency / saliency.max()
+        
+        return saliency
+
+
+class ViTSaliencyVisualizer:
+    """
+    Input Gradient Saliency Maps for Vision Transformer models.
+    
+    ViT uses patch-based attention which creates different saliency patterns
+    compared to CNN convolutions. This visualizer captures these patterns.
+    
+    Example:
+        >>> visualizer = ViTSaliencyVisualizer(vit_model)
+        >>> saliency = visualizer.generate_saliency(image_batch, class_idx=0)
+    """
+    
+    def __init__(self, model: nn.Module):
+        """
+        Initialize ViT saliency map visualizer.
+        
+        Args:
+            model: Vision Transformer model
+        """
+        self.model = model
+    
+    def generate_saliency(
+        self, 
+        input_tensor: torch.Tensor, 
+        class_idx: int
+    ) -> np.ndarray:
+        """
+        Generate saliency map using input gradients for ViT.
+        
+        Args:
+            input_tensor: Input image tensor [1, C, H, W]
+            class_idx: Target class index for gradient computation
+            
+        Returns:
+            Normalized saliency map [H, W]
+        """
+        self.model.eval()
+        
+        # Create input that requires gradients
+        input_img = input_tensor.clone().detach().requires_grad_(True)
+        
+        # Forward pass
+        output = self.model(input_img)
+        
+        # Backward pass for target class
+        self.model.zero_grad()
+        if input_img.grad is not None:
+            input_img.grad.zero_()
+        
+        output[0, class_idx].backward()
+        
+        # Get gradients w.r.t. input
+        if input_img.grad is None:
+            print("⚠️ Warning: No gradients computed")
+            return np.zeros((input_tensor.shape[2], input_tensor.shape[3]))
+        
+        saliency = input_img.grad.data.abs()
+        saliency, _ = saliency.max(dim=1)
+        saliency = saliency.squeeze().cpu().numpy()
+        
+        if saliency.max() > 0:
+            saliency = saliency / saliency.max()
+        
+        return saliency
+
+
+def plot_saliency_comparison(
+    model_cnn: nn.Module,
+    model_vit: nn.Module,
+    test_loader: torch.utils.data.DataLoader,
+    class_names: List[str],
+    device: torch.device,
+    num_samples: int = 5,
+    save_dir: Optional[Path] = None
+) -> None:
+    """
+    Generate side-by-side saliency comparison: CNN vs ViT.
+    
+    Args:
+        model_cnn: CNN model (PanCANLite or VGG16)
+        model_vit: Vision Transformer model
+        test_loader: Test data loader
+        class_names: List of class names
+        device: Device for inference
+        num_samples: Number of samples to visualize
+        save_dir: Optional directory to save figure
+    """
+    cnn_viz = SaliencyMapVisualizer(model_cnn)
+    vit_viz = ViTSaliencyVisualizer(model_vit)
+    
+    # Collect one sample per class
+    class_samples = {i: [] for i in range(len(class_names))}
+    for images, labels in test_loader:
+        for img, label in zip(images, labels):
+            label_idx = label.item()
+            if len(class_samples[label_idx]) < 1:
+                class_samples[label_idx].append((img, label_idx))
+        if all(len(samples) >= 1 for samples in class_samples.values()):
+            break
+    
+    # Generate visualizations
+    fig = plt.figure(figsize=(24, 4 * num_samples))
+    plt.subplots_adjust(hspace=0.4)
+    
+    for idx in range(min(num_samples, len(class_names))):
+        if len(class_samples[idx]) == 0:
+            continue
+        
+        img_tensor, true_label = class_samples[idx][0]
+        img_batch = img_tensor.unsqueeze(0).to(device)
+        
+        # Get predictions
+        with torch.no_grad():
+            cnn_output = model_cnn(img_batch)
+            vit_output = model_vit(img_batch)
+        
+        cnn_pred = cnn_output.argmax(dim=1).item()
+        vit_pred = vit_output.argmax(dim=1).item()
+        
+        # Generate saliency maps
+        cnn_saliency = cnn_viz.generate_saliency(img_batch, cnn_pred)
+        vit_saliency = vit_viz.generate_saliency(img_batch, vit_pred)
+        
+        # Prepare original image
+        img_np = img_tensor.detach().cpu().permute(1, 2, 0).numpy()
+        mean = np.array([0.485, 0.456, 0.406])
+        std = np.array([0.229, 0.224, 0.225])
+        img_np = std * img_np + mean
+        img_np = np.clip(img_np, 0, 1)
+        
+        # Resize and smooth saliency maps
+        cnn_saliency_resized = cv2.resize(cnn_saliency, (img_np.shape[1], img_np.shape[0]))
+        vit_saliency_resized = cv2.resize(vit_saliency, (img_np.shape[1], img_np.shape[0]))
+        
+        cnn_saliency_smooth = cv2.GaussianBlur(cnn_saliency_resized, (11, 11), 0)
+        vit_saliency_smooth = cv2.GaussianBlur(vit_saliency_resized, (11, 11), 0)
+        
+        cnn_saliency_smooth = cnn_saliency_smooth / (cnn_saliency_smooth.max() + 1e-8)
+        vit_saliency_smooth = vit_saliency_smooth / (vit_saliency_smooth.max() + 1e-8)
+        
+        # Create overlays
+        cnn_heatmap = cm.jet(cnn_saliency_smooth)[:, :, :3]
+        vit_heatmap = cm.jet(vit_saliency_smooth)[:, :, :3]
+        
+        cnn_overlay = 0.6 * img_np + 0.4 * cnn_heatmap
+        vit_overlay = 0.6 * img_np + 0.4 * vit_heatmap
+        
+        cnn_overlay = np.clip(cnn_overlay, 0, 1)
+        vit_overlay = np.clip(vit_overlay, 0, 1)
+        
+        # Plot 6 panels per row
+        ax1 = plt.subplot(num_samples, 6, idx * 6 + 1)
+        ax1.imshow(img_np)
+        ax1.set_title(f"Original: {class_names[true_label]}", fontsize=10)
+        ax1.axis('off')
+        
+        ax2 = plt.subplot(num_samples, 6, idx * 6 + 2)
+        ax2.imshow(cnn_saliency_smooth, cmap='jet')
+        ax2.set_title("CNN Saliency", fontsize=10)
+        ax2.axis('off')
+        
+        ax3 = plt.subplot(num_samples, 6, idx * 6 + 3)
+        ax3.imshow(cnn_overlay)
+        ax3.set_title(f"CNN: {class_names[cnn_pred]}", fontsize=10)
+        ax3.axis('off')
+        
+        ax4 = plt.subplot(num_samples, 6, idx * 6 + 4)
+        ax4.imshow(vit_saliency_smooth, cmap='jet')
+        ax4.set_title("ViT Saliency", fontsize=10)
+        ax4.axis('off')
+        
+        ax5 = plt.subplot(num_samples, 6, idx * 6 + 5)
+        ax5.imshow(vit_overlay)
+        ax5.set_title(f"ViT: {class_names[vit_pred]}", fontsize=10)
+        ax5.axis('off')
+        
+        ax6 = plt.subplot(num_samples, 6, idx * 6 + 6)
+        ax6.axis('off')
+        status = "✅" if true_label == cnn_pred == vit_pred else "⚠️"
+        ax6.text(0.1, 0.5, f"{status} True: {class_names[true_label]}\n"
+                          f"CNN: {class_names[cnn_pred]}\n"
+                          f"ViT: {class_names[vit_pred]}",
+                fontsize=11, va='center', fontfamily='monospace')
+    
+    plt.suptitle("Saliency Map Comparison: CNN vs Vision Transformer", fontsize=16, y=1.02)
+    plt.tight_layout()
+    
+    if save_dir:
+        save_path = Path(save_dir) / 'saliency_comparison.png'
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        print(f"✅ Saved to {save_path}")
+    
+    plt.show()

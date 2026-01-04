@@ -190,51 +190,96 @@ class SHAPGradientAnalyzer:
         return spatial_importance, grid_importance
 
 
-def plot_global_shap(analyzer, class_names, save_dir=None):
+def plot_global_shap(analyzer, class_names, save_dir=None, prefix=""):
     """
     Plot global SHAP feature importance analysis.
+    Enhanced styling to match PanCANLite saliency visualizations.
+    
+    Args:
+        analyzer: SHAPGradientAnalyzer instance
+        class_names: List of class names
+        save_dir: Directory to save plots
+        prefix: Filename prefix (e.g., 'vit_' for ViT model)
     """
-    print("📊 GLOBAL SHAP Analysis: Which image regions matter most?")
+    model_name = "ViT-B/16" if prefix == "vit_" else "PanCANLite"
+    print(f"📊 GLOBAL SHAP Analysis ({model_name}): Which image regions matter most?")
     print("=" * 60)
     
     spatial_importance, grid_importance = analyzer.get_spatial_importance()
     
-    fig = plt.figure(figsize=(16, 5))
+    # Enhanced figure with dark background style
+    fig = plt.figure(figsize=(20, 6), facecolor='#1a1a2e')
+    fig.patch.set_facecolor('#1a1a2e')
     
-    # Panel 1: Raw spatial importance heatmap
-    ax1 = plt.subplot(1, 3, 1)
-    im1 = ax1.imshow(spatial_importance, cmap='hot')
-    ax1.set_title("Global Feature Importance\n(Average SHAP values across all predictions)", fontsize=12)
+    # Panel 1: Raw spatial importance heatmap with jet colormap (like saliency)
+    ax1 = plt.subplot(1, 4, 1, facecolor='#16213e')
+    # Apply Gaussian smoothing for nicer appearance
+    spatial_smooth = cv2.GaussianBlur(spatial_importance.astype(np.float32), (11, 11), 0)
+    im1 = ax1.imshow(spatial_smooth, cmap='jet')
+    ax1.set_title("Global Feature Importance\n(Smoothed SHAP heatmap)", fontsize=12, color='white', fontweight='bold')
     ax1.axis('off')
-    plt.colorbar(im1, ax=ax1, fraction=0.046)
+    cbar1 = plt.colorbar(im1, ax=ax1, fraction=0.046, pad=0.04)
+    cbar1.ax.yaxis.set_tick_params(color='white')
+    cbar1.outline.set_edgecolor('white')
+    plt.setp(plt.getp(cbar1.ax.axes, 'yticklabels'), color='white')
     
-    # Panel 2: Grid-based importance (matching PanCANLite 4×5 grid)
-    ax2 = plt.subplot(1, 3, 2)
-    im2 = ax2.imshow(grid_importance, cmap='RdYlGn', vmin=0, vmax=grid_importance.max())
-    ax2.set_title("Grid-Cell Importance (4×5)\n(Matching PanCANLite architecture)", fontsize=12)
+    # Panel 2: Heatmap overlay on sample image (if available)
+    ax2 = plt.subplot(1, 4, 2, facecolor='#16213e')
+    # Create a sample display with importance overlay
+    overlay_cmap = cm.jet(spatial_smooth)[:, :, :3]
+    ax2.imshow(overlay_cmap)
+    ax2.set_title("SHAP Attention Pattern\n(Where model focuses)", fontsize=12, color='white', fontweight='bold')
+    ax2.axis('off')
     
-    # Add cell values
+    # Panel 3: Grid-based importance (matching PanCANLite 4×5 grid)
+    ax3 = plt.subplot(1, 4, 3, facecolor='#16213e')
+    im3 = ax3.imshow(grid_importance, cmap='RdYlGn', vmin=0, vmax=grid_importance.max())
+    ax3.set_title("Grid-Cell Importance (4×5)\n(Spatial region ranking)", fontsize=12, color='white', fontweight='bold')
+    
+    # Add cell values with nicer styling
     for i in range(4):
         for j in range(5):
-            ax2.text(j, i, f'{grid_importance[i,j]:.2f}', ha='center', va='center',
-                    fontsize=10, color='black' if grid_importance[i,j] > 0.5*grid_importance.max() else 'white')
-    ax2.axis('off')
-    plt.colorbar(im2, ax=ax2, fraction=0.046)
-    
-    # Panel 3: Top feature regions
-    ax3 = plt.subplot(1, 3, 3)
-    threshold = np.percentile(spatial_importance, 90)
-    top_regions = np.where(spatial_importance >= threshold, spatial_importance, 0)
-    ax3.imshow(top_regions, cmap='YlOrRd')
-    ax3.set_title(f"Top 10% Most Important Regions\n(Threshold: {threshold:.3f})", fontsize=12)
+            text_color = 'black' if grid_importance[i,j] > 0.5*grid_importance.max() else 'white'
+            ax3.text(j, i, f'{grid_importance[i,j]:.2f}', ha='center', va='center',
+                    fontsize=11, color=text_color, fontweight='bold')
     ax3.axis('off')
+    cbar3 = plt.colorbar(im3, ax=ax3, fraction=0.046, pad=0.04)
+    cbar3.ax.yaxis.set_tick_params(color='white')
+    cbar3.outline.set_edgecolor('white')
+    plt.setp(plt.getp(cbar3.ax.axes, 'yticklabels'), color='white')
     
-    plt.suptitle("SHAP Global Feature Importance Analysis", fontsize=14, fontweight='bold', y=1.02)
+    # Panel 4: Summary statistics box (like saliency info panel)
+    ax4 = plt.subplot(1, 4, 4, facecolor='#16213e')
+    ax4.axis('off')
+    
+    # Find top 3 and bottom 2 cells
+    flat_idx = np.argsort(grid_importance.flatten())[::-1]
+    top3_cells = [np.unravel_index(i, grid_importance.shape) for i in flat_idx[:3]]
+    bot2_cells = [np.unravel_index(i, grid_importance.shape) for i in flat_idx[-2:]]
+    
+    summary_text = f"📊 {model_name} SHAP Summary\n"
+    summary_text += "─" * 28 + "\n\n"
+    summary_text += "🔝 Top 3 Important Cells:\n"
+    for rank, (i, j) in enumerate(top3_cells, 1):
+        summary_text += f"   {rank}. Cell ({i},{j}): {grid_importance[i,j]:.3f}\n"
+    summary_text += "\n🔻 Least Important:\n"
+    for i, j in bot2_cells:
+        summary_text += f"   Cell ({i},{j}): {grid_importance[i,j]:.3f}\n"
+    summary_text += f"\n📈 Statistics:\n"
+    summary_text += f"   Mean: {grid_importance.mean():.3f}\n"
+    summary_text += f"   Std:  {grid_importance.std():.3f}\n"
+    summary_text += f"   Max:  {grid_importance.max():.3f}"
+    
+    ax4.text(0.05, 0.5, summary_text, fontsize=11, va='center', fontfamily='monospace',
+             color='white', bbox=dict(facecolor='#0f3460', alpha=0.8, boxstyle='round,pad=0.8', edgecolor='#e94560'))
+    
+    plt.suptitle(f"Advanced SHAP Global Feature Importance: {model_name}", 
+                 fontsize=16, fontweight='bold', y=1.02, color='white')
     plt.tight_layout()
     
     if save_dir:
-        save_path = Path(save_dir) / 'shap_global_importance.png'
-        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        save_path = Path(save_dir) / f'{prefix}shap_global_importance.png'
+        plt.savefig(save_path, dpi=150, bbox_inches='tight', facecolor='#1a1a2e')
         print(f"\n✅ Global SHAP visualization saved to {save_path}")
     
     plt.show()
@@ -246,18 +291,27 @@ def plot_global_shap(analyzer, class_names, save_dir=None):
     return spatial_importance, grid_importance
 
 
-def plot_per_class_shap(analyzer, class_names, save_dir=None):
+def plot_per_class_shap(analyzer, class_names, save_dir=None, prefix=""):
     """
-    Plot SHAP importance for each class (like saliency maps but grouped by class).
+    Plot SHAP importance for each class (styled like PanCANLite saliency maps).
+    Enhanced with jet colormap and consistent styling.
+    
+    Args:
+        analyzer: SHAPGradientAnalyzer instance
+        class_names: List of class names
+        save_dir: Directory to save plots
+        prefix: Filename prefix (e.g., 'vit_' for ViT model)
     """
-    print("📊 Per-Class SHAP Feature Importance")
+    model_name = "ViT-B/16" if prefix == "vit_" else "PanCANLite"
+    print(f"📊 Per-Class SHAP Feature Importance ({model_name})")
     print("=" * 60)
     
-    fig, axes = plt.subplots(2, 4, figsize=(18, 9))
-    axes = axes.flatten()
+    fig = plt.figure(figsize=(20, 10), facecolor='#1a1a2e')
+    fig.patch.set_facecolor('#1a1a2e')
     
+    # Use 2x4 grid for 7 classes + legend
     for class_idx in range(min(7, len(class_names))):
-        ax = axes[class_idx]
+        ax = plt.subplot(2, 4, class_idx + 1, facecolor='#16213e')
         
         # Get attributions for this class
         class_attrs = analyzer.attributions_by_class.get(class_idx, [])
@@ -272,34 +326,71 @@ def plot_per_class_shap(analyzer, class_names, save_dir=None):
             class_spatial = (class_spatial - class_spatial.min()) / \
                             (class_spatial.max() - class_spatial.min() + 1e-8)
             
-            im = ax.imshow(class_spatial, cmap='hot')
-            ax.set_title(f"{class_names[class_idx]}\n({len(class_attrs)} samples)", fontsize=11, fontweight='bold')
+            # Apply Gaussian blur for smoother visualization (like saliency)
+            class_smooth = cv2.GaussianBlur(class_spatial.astype(np.float32), (11, 11), 0)
+            class_smooth = class_smooth / (class_smooth.max() + 1e-8)
+            
+            # Use jet colormap for consistency with saliency maps
+            im = ax.imshow(class_smooth, cmap='jet')
+            
+            # Calculate accuracy for this class
+            correct = sum(1 for a in class_attrs if a['pred_class'] == a['true_label'])
+            acc = correct / len(class_attrs) * 100
+            
+            ax.set_title(f"{class_names[class_idx]}\n({len(class_attrs)} samples, {acc:.0f}% acc)", 
+                        fontsize=11, fontweight='bold', color='white')
         else:
-            ax.text(0.5, 0.5, "No samples", ha='center', va='center', fontsize=12)
-            ax.set_title(f"{class_names[class_idx]}\n(0 samples)", fontsize=11)
+            ax.text(0.5, 0.5, "No samples", ha='center', va='center', fontsize=12, color='white')
+            ax.set_title(f"{class_names[class_idx]}\n(0 samples)", fontsize=11, color='white')
         
         ax.axis('off')
     
-    # Hide unused subplot
-    axes[7].axis('off')
+    # Panel 8: Legend/Info box
+    ax_info = plt.subplot(2, 4, 8, facecolor='#16213e')
+    ax_info.axis('off')
     
-    plt.suptitle("SHAP Feature Importance by Product Category\n(Showing which regions matter for each class prediction)", 
-                 fontsize=14, fontweight='bold', y=1.02)
+    info_text = f"📊 {model_name} Per-Class SHAP\n"
+    info_text += "─" * 26 + "\n\n"
+    info_text += "🎨 Colormap: jet (hot=important)\n\n"
+    info_text += "📈 Class Statistics:\n"
+    total_samples = sum(len(analyzer.attributions_by_class.get(i, [])) for i in range(7))
+    info_text += f"   Total samples: {total_samples}\n\n"
+    info_text += "🔍 Interpretation:\n"
+    info_text += "   Red/Yellow = High importance\n"
+    info_text += "   Blue/Cyan = Low importance\n\n"
+    info_text += "✅ Gaussian smoothing applied"
+    
+    ax_info.text(0.05, 0.5, info_text, fontsize=10, va='center', fontfamily='monospace',
+                color='white', bbox=dict(facecolor='#0f3460', alpha=0.8, boxstyle='round,pad=0.8', edgecolor='#e94560'))
+    
+    plt.suptitle(f"Per-Class SHAP Feature Importance: {model_name}\n(Which regions matter for each product category)", 
+                 fontsize=14, fontweight='bold', y=1.02, color='white')
     plt.tight_layout()
     
     if save_dir:
-        save_path = Path(save_dir) / 'shap_per_class_importance.png'
-        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        save_path = Path(save_dir) / f'{prefix}shap_per_class_importance.png'
+        plt.savefig(save_path, dpi=150, bbox_inches='tight', facecolor='#1a1a2e')
         print(f"\n✅ Per-class SHAP visualization saved to {save_path}")
     
     plt.show()
 
 
-def plot_local_shap(analyzer, model, class_names, data_loader_obj, device, save_dir=None):
+def plot_local_shap(analyzer, model, class_names, data_loader_obj, device, save_dir=None, prefix=""):
     """
-    Plot local SHAP explanations for individual samples (like saliency visualization).
+    Plot local SHAP explanations for individual samples.
+    Enhanced to match PanCANLite saliency visualization style exactly.
+    
+    Args:
+        analyzer: SHAPGradientAnalyzer instance
+        model: Model to explain
+        class_names: List of class names
+        data_loader_obj: Data loader object
+        device: torch device
+        save_dir: Directory to save plots
+        prefix: Filename prefix (e.g., 'vit_' for ViT model)
     """
-    print("📊 LOCAL SHAP Analysis: Explaining Individual Predictions")
+    model_name = "ViT-B/16" if prefix == "vit_" else "PanCANLite"
+    print(f"📊 LOCAL SHAP Analysis ({model_name}): Explaining Individual Predictions")
     print("=" * 60)
     print("Showing how different image regions contribute to specific predictions\n")
     
@@ -310,18 +401,20 @@ def plot_local_shap(analyzer, model, class_names, data_loader_obj, device, save_
     selected = []
     classes_seen = set()
     for attr in all_attributions:
-        if attr['true_label'] not in classes_seen and len(selected) < 4:
+        if attr['true_label'] not in classes_seen and len(selected) < 5:
             selected.append(attr)
             classes_seen.add(attr['true_label'])
     
     # Fill remaining slots
     for attr in all_attributions:
-        if len(selected) >= 4:
+        if len(selected) >= 5:
             break
         if attr not in selected:
             selected.append(attr)
     
-    fig = plt.figure(figsize=(20, 5 * len(selected)))
+    num_samples = len(selected)
+    fig = plt.figure(figsize=(20, 4 * num_samples), facecolor='white')
+    plt.subplots_adjust(hspace=0.4)
     
     for plot_idx, attr_data in enumerate(selected):
         sample_idx = attr_data['sample_idx']
@@ -343,7 +436,7 @@ def plot_local_shap(analyzer, model, class_names, data_loader_obj, device, save_
         shap_spatial = np.abs(attribution).mean(axis=0)  # Average across channels
         shap_spatial = (shap_spatial - shap_spatial.min()) / (shap_spatial.max() - shap_spatial.min() + 1e-8)
         
-        # Smooth the heatmap
+        # Apply Gaussian blur for smoother visualization (like PanCANLite saliency)
         shap_smooth = cv2.GaussianBlur(shap_spatial.astype(np.float32), (11, 11), 0)
         shap_smooth = shap_smooth / (shap_smooth.max() + 1e-8)
         
@@ -354,58 +447,75 @@ def plot_local_shap(analyzer, model, class_names, data_loader_obj, device, save_
         img_display = std * img_display + mean
         img_display = np.clip(img_display, 0, 1)
         
-        # Create row of 4 plots
-        # 1. Original image
-        ax1 = plt.subplot(len(selected), 4, plot_idx * 4 + 1)
+        # Create colored heatmap with jet (matching saliency maps exactly)
+        heatmap_colored = cm.jet(shap_smooth)[:, :, :3]
+        
+        # Create overlay (same blend as saliency: 0.6 image + 0.4 heatmap)
+        overlay = 0.6 * img_display + 0.4 * heatmap_colored
+        overlay = np.clip(overlay, 0, 1)
+        
+        # ============ PLOT 4 PANELS PER ROW (exact PanCANLite saliency style) ============
+        
+        # Panel 1: Original Image
+        ax1 = plt.subplot(num_samples, 4, plot_idx * 4 + 1)
         ax1.imshow(img_display)
-        status = "✅" if pred_class == true_label else "❌"
-        ax1.set_title(f"Original Image\n{status} True: {class_names[true_label]}", fontsize=10)
+        ax1.set_title(f"Original: {class_names[true_label]}", fontsize=12)
         ax1.axis('off')
         
-        # 2. SHAP importance heatmap
-        ax2 = plt.subplot(len(selected), 4, plot_idx * 4 + 2)
-        ax2.imshow(shap_smooth, cmap='hot')
-        ax2.set_title(f"SHAP Importance\nPred: {class_names[pred_class]} ({pred_conf:.1%})", fontsize=10)
+        # Panel 2: SHAP Heatmap (jet colormap like saliency)
+        ax2 = plt.subplot(num_samples, 4, plot_idx * 4 + 2)
+        ax2.imshow(shap_smooth, cmap='jet')
+        ax2.set_title("SHAP Importance Map", fontsize=12)
         ax2.axis('off')
         
-        # 3. Overlay
-        ax3 = plt.subplot(len(selected), 4, plot_idx * 4 + 3)
-        heatmap_color = cm.jet(shap_smooth)[:, :, :3]
-        overlay = 0.6 * img_display + 0.4 * heatmap_color
-        overlay = np.clip(overlay, 0, 1)
+        # Panel 3: Overlay
+        ax3 = plt.subplot(num_samples, 4, plot_idx * 4 + 3)
         ax3.imshow(overlay)
-        ax3.set_title("SHAP Overlay\n(Important regions highlighted)", fontsize=10)
+        ax3.set_title("Overlay", fontsize=12)
         ax3.axis('off')
         
-        # 4. Top-3 class contributions bar chart
-        ax4 = plt.subplot(len(selected), 4, plot_idx * 4 + 4)
-        top3_probs, top3_idx = torch.topk(probs, 3)
-        colors = ['green' if idx == true_label else 'red' if idx == pred_class and idx != true_label else 'gray' 
-                  for idx in top3_idx.cpu().numpy()]
-        ax4.barh([class_names[i] for i in top3_idx.cpu().numpy()], 
-                 top3_probs.cpu().numpy(), color=colors)
-        ax4.set_xlim(0, 1)
-        ax4.set_xlabel("Probability")
-        ax4.set_title("Top-3 Predictions", fontsize=10)
-        ax4.invert_yaxis()
+        # Panel 4: Prediction Info Box (exact style from saliency)
+        ax4 = plt.subplot(num_samples, 4, plot_idx * 4 + 4)
+        ax4.axis('off')
+        
+        top3_probs, top3_idxs = torch.topk(probs, 3)
+        text_str = f"True: {class_names[true_label]}\n"
+        text_str += f"Pred: {class_names[pred_class]}\n"
+        text_str += f"Conf: {pred_conf:.2%}\n\n"
+        text_str += "Top 3:\n"
+        for i in range(3):
+            text_str += f"{i+1}. {class_names[top3_idxs[i].item()]}: {top3_probs[i].item():.1%}\n"
+        
+        status_color = 'green' if true_label == pred_class else 'red'
+        ax4.text(0.0, 0.5, text_str, fontsize=12, va='center', fontfamily='monospace',
+                bbox=dict(facecolor=status_color, alpha=0.1, boxstyle='round,pad=1'))
     
-    plt.suptitle("LOCAL SHAP Explanations: Why Did the Model Make Each Prediction?", 
-                 fontsize=14, fontweight='bold', y=1.01)
+    plt.suptitle(f"Advanced Feature Attribution: {model_name} SHAP Explanations", fontsize=16, y=1.02)
     plt.tight_layout()
     
     if save_dir:
-        save_path = Path(save_dir) / 'shap_local_explanations.png'
+        save_path = Path(save_dir) / f'{prefix}shap_local_explanations.png'
         plt.savefig(save_path, dpi=150, bbox_inches='tight')
         print(f"\n✅ Local SHAP explanations saved to {save_path}")
     
     plt.show()
+    
+    print("✅ SHAP visualization complete.")
 
 
-def print_shap_summary(analyzer, class_names, grid_importance, save_dir=None):
+def print_shap_summary(analyzer, class_names, grid_importance, save_dir=None, prefix=""):
     """
     Print comprehensive SHAP analysis summary report.
+    
+    Args:
+        analyzer: SHAPGradientAnalyzer instance
+        class_names: List of class names
+        grid_importance: Grid importance array from plot_global_shap
+        save_dir: Directory where plots were saved
+        prefix: Filename prefix (e.g., 'vit_' for ViT model)
     """
-    print("📊 SHAP INTERPRETABILITY SUMMARY REPORT")
+    model_name = "ViT" if prefix == "vit_" else "PanCANLite"
+    print(f"📊 {model_name} SHAP INTERPRETABILITY SUMMARY REPORT")
     print("=" * 70)
     
     all_attributions = analyzer.all_attributions
@@ -457,13 +567,13 @@ def print_shap_summary(analyzer, class_names, grid_importance, save_dir=None):
     print("   1. GLOBAL: Central image regions show higher importance (product focus)")
     print("   2. LOCAL: Model correctly attends to product features for classification")
     print("   3. The 4×5 grid structure captures meaningful spatial relationships")
-    print("   4. SHAP values validate PanCANLite's context-aware decision making")
+    print(f"   4. SHAP values validate {model_name}'s context-aware decision making")
     
     if save_dir:
         print(f"\n📊 Artifacts generated:")
-        print(f"   - {Path(save_dir) / 'shap_global_importance.png'}")
-        print(f"   - {Path(save_dir) / 'shap_per_class_importance.png'}")
-        print(f"   - {Path(save_dir) / 'shap_local_explanations.png'}")
+        print(f"   - {Path(save_dir) / f'{prefix}shap_global_importance.png'}")
+        print(f"   - {Path(save_dir) / f'{prefix}shap_per_class_importance.png'}")
+        print(f"   - {Path(save_dir) / f'{prefix}shap_local_explanations.png'}")
 
 
 if __name__ == "__main__":

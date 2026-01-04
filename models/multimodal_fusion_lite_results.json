@@ -1,0 +1,11 @@
+{
+  "model": "Multimodal Fusion Lite",
+  "architecture": "EfficientNet-B0 (1280-dim) + TF-IDF (768-dim) -> Late Fusion",
+  "test_accuracy": 0.9163498098859315,
+  "test_f1": 0.9162547709190765,
+  "trainable_params": 657927,
+  "num_classes": 7,
+  "fusion_type": "late_fusion",
+  "text_encoder": "TF-IDF",
+  "image_encoder": "EfficientNet-B0"
+}
